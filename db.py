@@ -17,7 +17,7 @@ class User(db.Entity):
         user = cls.get(discord_id=id)
         if user is None:
             user = cls(discord_id=id)
-            print(f'Created user {id}')
+            print(f'created user {id}')
         return user
 
 
@@ -41,5 +41,5 @@ class Vote(db.Entity):
     at = Optional(datetime)
 
 
-sql_debug(True)
+# sql_debug(True)
 db.generate_mapping(create_tables=True)

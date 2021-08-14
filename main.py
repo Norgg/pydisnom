@@ -3,6 +3,7 @@
 from box import Box
 import discord
 import inspect
+import traceback
 from pony.orm import db_session
 from db import db, User, Rule
 
@@ -54,6 +55,7 @@ async def on_message(message):
             context.command = message.content.split(' ')[0][1:].lower()
             context.rest = message.content[1+len(context.command):]
 
+            print('running rules')
             run_rules = Rule.get(title='run_rules')
             await async_exec(run_rules.code, context)
 
@@ -66,21 +68,16 @@ def save_initial_rules():
                 continue
             code = inspect.getsource(rule)
             code = '\n'.join(code.splitlines()[1:])
-            print(code)
             status = 'fixed' if rule.__name__ == 'run_rules' else 'initial'
             Rule(title=rule.__name__, code=code, status=status)
 
 
 async def async_exec(code, context):
     # Make an async function with the code and `exec` it
-    print(code)
-
     exec_code = (
         'async def __ex(context): ' +
         ''.join(f'\n    {line}' for line in code.split('\n'))
     )
-
-    print(exec_code)
     exec(exec_code)
 
     # Get `__ex` from local variables, call it and return the result
@@ -90,9 +87,13 @@ async def async_exec(code, context):
 async def run_rules(context):
     for rule in Rule.select(lambda rule: rule.status in ['initial', 'passed']).order_by(Rule.id):
         with db_session:
-            await async_exec(rule.code, context)
-    for to, message in messages:
-        await to.send(message)
+            try:
+                await async_exec(rule.code, context)
+            except Exception as e:
+                message(context.channel, f'Error running rule {rule.title}: {e}')
+                traceback.print_exc()
+    for to, msg in messages:
+        await to.send(msg)
     messages.clear()
 
 
