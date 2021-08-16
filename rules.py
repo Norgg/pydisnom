@@ -77,7 +77,7 @@ def propose():
     '''
     Propose a new rule with the title on the first line and code on subsequent lines, eg:
     !propose test rule
-    message(channel, 'test')
+    if command == 'test': message(channel, 'test')
     '''
     if command == 'propose':
         lines = rest.splitlines()
@@ -129,7 +129,7 @@ def vote():
 
 @initial_rule()
 def count():
-    '''Tally up votes after [voting_duration] and pass or reject rules if they have more than [min_votes]'''
+    '''Tally up votes after a while and pass or reject rules if they have more than a minimum number of votes'''
     voting_duration = timedelta(minutes=1)
     min_votes = 1
     for rule in Rule.select(status='proposed'):
@@ -165,7 +165,7 @@ def replace():
     Propose replacing a rule with a new rule, eg:
     !replace test
     \'''new version of test\'''
-    message(channel, 'hello')
+    if command == 'test': message(channel, 'hello!')
     '''
     if command == 'replace':
         lines = rest.splitlines()
