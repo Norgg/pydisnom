@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pony.orm import Database, Optional, PrimaryKey, Required, Set, sql_debug
+from pony.orm import Database, Optional, Json, PrimaryKey, Required, Set, sql_debug
 
 
 db = Database('sqlite', 'pydisnom.db', create_db=True)
@@ -8,7 +8,8 @@ db = Database('sqlite', 'pydisnom.db', create_db=True)
 
 class User(db.Entity):
     discord_id = PrimaryKey(str)
-    last_known_name = Optional(str)
+    name = Optional(str)
+    data = Required(Json, default=dict)
     proposed_rules = Set("Rule")
     votes = Set("Vote")
 
@@ -23,19 +24,21 @@ class User(db.Entity):
 
 class Rule(db.Entity):
     title = Required(str, unique=True)
-    code = Required(str, autostrip=False)
+    code = Optional(str, autostrip=False)
     status = Required(str)
     doc = Optional(str, nullable=True)
     replaces = Optional(str, nullable=True)
+    deletes = Optional(str, nullable=True)
     proposed_by = Optional(User)
     proposed_at = Optional(datetime, default=datetime.now)
     passed_at = Optional(datetime)
+    data = Required(Json, default=dict)
     votes = Set("Vote")
 
     @property
     def markdown(self):
         if self.status == 'proposed':
-            status_string = f'{self.status} at {self.proposed_at:%c} by {self.proposed_by.last_known_name}'
+            status_string = f'{self.status} at {self.proposed_at:%c} by {self.proposed_by.name}'
         elif self.status == 'passed':
             status_string = f'{self.status} at {self.passed_at:%c}'
         else:

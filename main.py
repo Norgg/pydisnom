@@ -50,12 +50,14 @@ async def on_ready():
 async def on_message(message):
     with db_session:
         if message.channel == game_channel and message.content.startswith('!'):
+            print('running rules due to command')
             await _run_rules(message)
 
 
 async def rule_loop():
     while True:
         with db_session:
+            print('running rules tick')
             await _run_rules()
             await asyncio.sleep(10)
 
@@ -67,7 +69,7 @@ async def _run_rules(message=None):
     if message:
         context.discord_user = message.author
         context.db_user = User.get_or_create(str(message.author.id))
-        context.db_user.last_known_name = message.author.name
+        context.db_user.name = message.author.name
         context.message = message
         context.channel = message.channel
         context.command = message.content.split(' ')[0][1:].lower()
@@ -76,7 +78,6 @@ async def _run_rules(message=None):
         context.channel = game_channel
         context.command = None
 
-    print('running rules')
     await run(Rule.get(title='run_rules'), context)
 
 

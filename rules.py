@@ -2,7 +2,7 @@ import traceback
 from datetime import datetime, timedelta
 
 from pony.orm import db_session
-from db import Rule, Vote
+from db import Rule, User, Vote
 
 messages = []
 initial_rules = []
@@ -59,7 +59,7 @@ def list_rules(context):
 
 @initial_rule()
 def show(context):
-    '''Display details of a rule with !show [title]'''
+    '''Display details and code of a rule with !show [title]'''
     if context.command == 'show':
         rule = Rule.get(title=context.rest.strip().lower())
         if rule:
@@ -98,7 +98,7 @@ def propose(context):
             doc=doc,
             status='proposed'
         )
-        message(context.channel, f'{rule.proposed_by.last_known_name} proposed rule {rule.title}')
+        message(context.channel, f'{rule.proposed_by.name} proposed rule {rule.title}')
 
 
 @initial_rule()
@@ -139,7 +139,12 @@ def count(context):
                     rule.title = rule.replaces
                     rule.replaces = None
                     rule.status = 'passed'
+                    rule.passed_at = datetime.now()
                     message(context.channel, f'{rule.title} has been replaced ({rule.yays} - {rule.nays})!')
+                elif rule.deletes:
+                    Rule.get(title=rule.deletes).delete()
+                    rule.delete()
+                    message(context.channel, f'{rule.deletes} has been deleted ({rule.yays} - {rule.nays})!')
                 else:
                     rule.status = 'passed'
                     message(context.channel, f'{rule.title} has passed ({rule.yays} - {rule.nays})!')
@@ -187,4 +192,34 @@ def replace(context):
             replaces=replaces_title,
             status='proposed'
         )
-        message(context.channel, f'{rule.proposed_by.last_known_name} proposed to {rule.title}')
+        message(context.channel, f'{rule.proposed_by.name} proposed to {rule.title}')
+
+
+@initial_rule()
+def delete(context):
+    '''Propose deletion of a rule: !delete [title]'''
+    if context.command == 'delete':
+        deletes_title = context.rest.splitlines()[0].strip().lower()
+        title = f'delete {deletes_title}'
+
+        if not (deletes_title):
+            message(context.channel, 'Delete which rule?')
+            return
+
+        if not Rule.get(title=deletes_title):
+            message(context.channel, f'Couldn\'t find rule to delete: {deletes_title}')
+            return
+
+        if Rule.get(title=title):
+            message(context.channel, f'A vote to delete {deletes_title} is already in progress')
+            return
+
+        rule = Rule(
+            proposed_by=context.db_user,
+            title=title,
+            code='',
+            doc=f'Delete {deletes_title}',
+            deletes=deletes_title,
+            status='proposed'
+        )
+        message(context.channel, f'{rule.proposed_by.name} proposed to {rule.title}')
