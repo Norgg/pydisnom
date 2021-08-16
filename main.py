@@ -5,8 +5,8 @@ from box import Box
 import discord
 import inspect
 from pony.orm import db_session
-from db import User, Rule, Vote
-from rules import initial_rules, message, run
+from db import User, Rule
+from rules import initial_rules, run
 
 client = discord.Client()
 pdn_guild = None
@@ -47,10 +47,10 @@ async def on_ready():
 
 
 @client.event
-async def on_message(msg):
+async def on_message(message):
     with db_session:
-        if msg.content.startswith('!'):
-            await _run_rules(msg)
+        if message.channel == game_channel and message.content.startswith('!'):
+            await _run_rules(message)
 
 
 async def rule_loop():
@@ -60,18 +60,18 @@ async def rule_loop():
             await asyncio.sleep(10)
 
 
-async def _run_rules(msg=None):
+async def _run_rules(message=None):
     # Set up context object for rules
     context = Box()
 
-    if msg:
-        context.discord_user = msg.author
-        context.db_user = User.get_or_create(str(msg.author.id))
-        context.db_user.last_known_name = msg.author.name
-        context.message = msg
-        context.channel = msg.channel
-        context.command = msg.content.split(' ')[0][1:].lower()
-        context.rest = msg.content[1+len(context.command):]
+    if message:
+        context.discord_user = message.author
+        context.db_user = User.get_or_create(str(message.author.id))
+        context.db_user.last_known_name = message.author.name
+        context.message = message
+        context.channel = message.channel
+        context.command = message.content.split(' ')[0][1:].lower()
+        context.rest = message.content[1+len(context.command):]
     else:
         context.channel = game_channel
         context.command = None
