@@ -1,7 +1,8 @@
 import traceback
+from datetime import datetime, timedelta
 
 from pony.orm import db_session
-from db import Rule
+from db import Rule, Vote
 messages = []
 
 
@@ -37,7 +38,8 @@ async def run_rules(context):
 
 def list_rules(context):
     if context.command == 'list':
-        message(context.channel, '\n'.join([f'**{rule.title}**: {rule.status}' for rule in Rule.select()]))
+        rules_string = '\n'.join([f'**{rule.title}**: {rule.status}' for rule in Rule.select()])
+        message(context.channel, f'The current rules are:\n{rules_string}')
 
 
 def show(context):
@@ -66,3 +68,64 @@ def propose(context):
             status='proposed'
         )
         message(context.channel, f'{rule.proposed_by.last_known_name} proposed rule {rule.title}')
+
+
+def approve(context):
+    if context.command == 'approve':
+        title = context.rest.strip().lower()
+        rule = Rule.get(title=title)
+        if rule:
+            if rule.status == 'proposed':
+                Vote(user=context.db_user, rule=rule, vote='yay')
+                message(context.channel, f'Rule {title} approved by {context.discord_user.name}')
+            else:
+                message(context.channel, 'Can only vote on rules that are still proposed')
+        else:
+            message(context.channel, f'Rule {title} not found')
+
+
+def reject(context):
+    if context.command == 'reject':
+        title = context.rest.strip().lower()
+        rule = Rule.get(title=title)
+        if rule:
+            if rule.status == 'proposed':
+                Vote(user=context.db_user, rule=rule, vote='nay')
+                message(context.channel, f'Rule {title} rejected by {context.discord_user.name}')
+            else:
+                message(context.channel, 'Can only vote on rules that are still proposed')
+        else:
+            message(context.channel, f'Rule {title} not found')
+
+
+def abstain(context):
+    if context.command == 'abstain':
+        title = context.rest.strip().lower()
+        rule = Rule.get(title=title)
+        if rule:
+            if rule.status == 'proposed':
+                Vote(user=context.db_user, rule=rule, vote='abstain')
+                message(context.channel, f'{context.discord_user.name} abstained on {rule.title}')
+            else:
+                message(context.channel, 'Can only vote on rules that are still proposed')
+        else:
+            message(context.channel, f'Rule {title} not found')
+
+
+def count(context):
+    for rule in Rule.select(status='proposed'):
+        time_diff = datetime.now() - rule.proposed_at
+        if time_diff > timedelta(minutes=1):
+            message(context.channel, f'Counting votes for {rule.title}')
+            yay_votes = Vote.select(rule=rule, vote='yay').count()
+            nay_votes = Vote.select(rule=rule, vote='nay').count()
+            min_votes = 1
+            if yay_votes + nay_votes < min_votes:
+                rule.status = 'rejected'
+                message(context.channel, f'{rule.title} did not receive enough total votes ({yay_votes} - {nay_votes})')
+            elif yay_votes > nay_votes:
+                rule.status = 'passed'
+                message(context.channel, f'{rule.title} has passed ({yay_votes} - {nay_votes})!')
+            else:
+                rule.status = 'rejected'
+                message(context.channel, f'{rule.title} has been rejected ({yay_votes} - {nay_votes})!')

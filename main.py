@@ -5,8 +5,8 @@ from box import Box
 import discord
 import inspect
 from pony.orm import db_session
-from db import User, Rule
-from rules import async_exec, run_rules, list_rules, show, propose
+from db import User, Rule, Vote
+from rules import async_exec, run_rules, list_rules, show, propose, approve, reject, abstain, count
 
 client = discord.Client()
 pdn_guild = None
@@ -38,7 +38,7 @@ async def on_ready():
 
     # Find the game channel
     for channel in pdn_guild.channels:
-        if channel.name == 'game':
+        if channel.name == 'testing':
             global game_channel
             game_channel = channel
             break
@@ -82,7 +82,7 @@ async def _run_rules(message=None):
 
 
 def save_initial_rules():
-    rules = [run_rules, list_rules, show, propose]
+    rules = [run_rules, list_rules, show, propose, approve, reject, abstain, count]
     with db_session:
         for rule in rules:
             if (Rule.get(title=rule.__name__)):

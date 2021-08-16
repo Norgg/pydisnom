@@ -32,13 +32,25 @@ class Rule(db.Entity):
 
     @property
     def markdown(self):
-        return f'**{self.title}** ({self.status}):\n```python\n{self.code}\n```'
+        if self.status == 'proposed':
+            status_string = f'{self.status} at {self.proposed_at:%c} by {self.proposed_by.last_known_name}'
+        elif self.status == 'passed':
+            status_string = '{self.status} at {self.passed_at:%c}'
+        else:
+            status_string = '{self.status}'
+
+        yay_votes = Vote.select(rule=self, vote='yay').count()
+        nay_votes = Vote.select(rule=self, vote='nay').count()
+
+        vote_string = f'{yay_votes} yay - {nay_votes} nay'
+        return f'**{self.title}** ({status_string}):\nvote_string\n```python\n{self.code}\n```'
 
 
 class Vote(db.Entity):
     user = Required(User)
     rule = Required(Rule)
-    at = Optional(datetime)
+    vote = Required(str)
+    at = Optional(datetime, default=datetime.now)
 
 
 # sql_debug(True)
