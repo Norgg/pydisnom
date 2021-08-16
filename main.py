@@ -65,15 +65,16 @@ async def rule_loop():
 async def _run_rules(message=None):
     # Set up context object for rules
     if message:
-        rules.discord_user = message.author
-        rules.db_user = User.get_or_create(str(message.author.id))
-        rules.db_user.name = message.author.name
+        rules.user = User.get_or_create(str(message.author.id))
+        rules.user.name = message.author.name
         rules.channel = message.channel
         rules.command = message.content.split(' ')[0][1:].lower()
         rules.rest = message.content[1+len(rules.command):]
     else:
+        rules.user = None
         rules.channel = game_channel
         rules.command = None
+        rules.rest = None
 
     await rules.run(Rule.get(title='run_rules'))
 

@@ -9,9 +9,7 @@ initial_rules = []
 
 
 # Global variables that are used as rule context
-discord_user = None
-db_user = None
-discord_message = None
+user = None
 channel = None
 command = None
 rest = None
@@ -58,7 +56,7 @@ async def run_rules():
 @initial_rule('list')
 def list_rules():
     '''List all rules'''
-    if command == 'list':
+    if command in ['list', 'help']:
         rules_string = '\n'.join([f'**{rule.title}** ({rule.status}) - {rule.doc}' for rule in Rule.select()])
         message(channel, f'The current rules are:\n{rules_string}')
 
@@ -98,7 +96,7 @@ def propose():
         doc = locals()['__func'].__doc__
 
         rule = Rule(
-            proposed_by=db_user,
+            proposed_by=user,
             title=title,
             code=code,
             doc=doc,
@@ -115,12 +113,12 @@ def vote():
         rule = Rule.get(title=title)
         if rule:
             if rule.status == 'proposed':
-                existing_vote = Vote.get(user=db_user, rule=rule)
+                existing_vote = Vote.get(user=user, rule=rule)
                 if existing_vote:
                     existing_vote.vote = command
                 else:
-                    Vote(user=db_user, rule=rule, vote=command)
-                message(channel, f'{discord_user.name} voted {command} on {rule.title}')
+                    Vote(user=user, rule=rule, vote=command)
+                message(channel, f'{user.name} voted {command} on {rule.title}')
             else:
                 message(channel, 'Can only vote on rules that are still proposed')
         else:
@@ -191,7 +189,7 @@ def replace():
         doc = locals()['__func'].__doc__
 
         rule = Rule(
-            proposed_by=db_user,
+            proposed_by=user,
             title=title,
             code=code,
             doc=doc,
@@ -221,7 +219,7 @@ def delete():
             return
 
         rule = Rule(
-            proposed_by=db_user,
+            proposed_by=user,
             title=title,
             code='',
             doc=f'Delete {deletes_title}',
