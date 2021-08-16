@@ -6,7 +6,7 @@ import discord
 import inspect
 from pony.orm import db_session
 from db import User, Rule
-from rules import initial_rules, run
+import rules
 
 client = discord.Client()
 pdn_guild = None
@@ -64,26 +64,23 @@ async def rule_loop():
 
 async def _run_rules(message=None):
     # Set up context object for rules
-    context = Box()
-
     if message:
-        context.discord_user = message.author
-        context.db_user = User.get_or_create(str(message.author.id))
-        context.db_user.name = message.author.name
-        context.message = message
-        context.channel = message.channel
-        context.command = message.content.split(' ')[0][1:].lower()
-        context.rest = message.content[1+len(context.command):]
+        rules.discord_user = message.author
+        rules.db_user = User.get_or_create(str(message.author.id))
+        rules.db_user.name = message.author.name
+        rules.channel = message.channel
+        rules.command = message.content.split(' ')[0][1:].lower()
+        rules.rest = message.content[1+len(rules.command):]
     else:
-        context.channel = game_channel
-        context.command = None
+        rules.channel = game_channel
+        rules.command = None
 
-    await run(Rule.get(title='run_rules'), context)
+    await rules.run(Rule.get(title='run_rules'))
 
 
 def save_initial_rules():
     with db_session:
-        for rule in initial_rules:
+        for rule in rules.initial_rules:
             code = inspect.getsource(rule)
             code = '\n'.join(code.splitlines()[2:])
             status = 'fixed' if rule.__name__ == 'run_rules' else 'initial'
