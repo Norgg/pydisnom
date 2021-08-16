@@ -35,9 +35,9 @@ class Rule(db.Entity):
         if self.status == 'proposed':
             status_string = f'{self.status} at {self.proposed_at:%c} by {self.proposed_by.last_known_name}'
         elif self.status == 'passed':
-            status_string = '{self.status} at {self.passed_at:%c}'
+            status_string = f'{self.status} at {self.passed_at:%c}'
         else:
-            status_string = '{self.status}'
+            status_string = f'{self.status}'
 
         yay_votes = Vote.select(rule=self, vote='yay').count()
         nay_votes = Vote.select(rule=self, vote='nay').count()
