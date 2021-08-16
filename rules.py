@@ -17,21 +17,21 @@ def initial_rule(title=None):
     return decorator
 
 
-async def async_exec(code, context):
+def message(to, message):
+    '''Send a message to a channel or user'''
+    messages.append((to, message))
+
+
+async def run(rule, context):
     # Make an async function with the code and `exec` it
     exec_code = (
         'async def __ex(context): ' +
-        ''.join(f'\n    {line}' for line in code.split('\n'))
+        ''.join(f'\n    {line}' for line in rule.code.split('\n'))
     )
     exec(exec_code)
 
     # Get `__ex` from local variables, call it and return the result
     return await locals()['__ex'](context)
-
-
-def message(to, message):
-    '''Send a message to a channel or user'''
-    messages.append((to, message))
 
 
 @initial_rule()
@@ -40,7 +40,7 @@ async def run_rules(context):
     for rule in Rule.select(lambda rule: rule.status in ['initial', 'passed']).order_by(Rule.id):
         with db_session:
             try:
-                await async_exec(rule.code, context)
+                await run(rule, context)
             except Exception as e:
                 message(context.channel, f'Error running rule {rule.title}: {e}')
                 traceback.print_exc()
@@ -80,15 +80,22 @@ def propose(context):
             return
 
         title = context.rest.splitlines()[0].strip().lower()
+        code = '\n'.join(context.rest.splitlines()[1:])
 
         if Rule.get(title=title):
             message(context.channel, f'A rule already exists called "{title}"')
             return
 
+        # Extract docstring from proposed rule
+        doc_func = 'def __func(context): ' + ''.join(f'\n    {line}' for line in code.split('\n'))
+        exec(doc_func)
+        doc = locals()['__func'].__doc__
+
         rule = Rule(
             proposed_by=context.db_user,
             title=title,
-            code='\n'.join(context.rest.splitlines()[1:]),
+            code=code,
+            doc=doc,
             status='proposed'
         )
         message(context.channel, f'{rule.proposed_by.last_known_name} proposed rule {rule.title}')
@@ -102,8 +109,12 @@ def vote(context):
         rule = Rule.get(title=title)
         if rule:
             if rule.status == 'proposed':
-                Vote(user=context.db_user, rule=rule, vote=context.command)
-                message(context.channel, f'{context.discord_user.name} voted {vote} on {rule.title}')
+                existing_vote = Vote.get(user=context.db_user, rule=rule)
+                if existing_vote:
+                    existing_vote.vote = context.command
+                else:
+                    Vote(user=context.db_user, rule=rule, vote=context.command)
+                message(context.channel, f'{context.discord_user.name} voted {context.command} on {rule.title}')
             else:
                 message(context.channel, 'Can only vote on rules that are still proposed')
         else:
@@ -113,23 +124,67 @@ def vote(context):
 @initial_rule()
 def count(context):
     '''Tally up votes after [voting_duration] and pass or reject rules if they have more than [min_votes]'''
-    voting_duration = timedelta(minutes=10)
-    min_votes = 2
+    voting_duration = timedelta(minutes=1)
+    min_votes = 1
     for rule in Rule.select(status='proposed'):
         time_diff = datetime.now() - rule.proposed_at
-        if time_diff > timedelta(minutes=voting_duration):
+        if time_diff > voting_duration:
             message(context.channel, f'Counting votes for {rule.title}')
             if rule.yays + rule.nays < min_votes:
-                rule.status = 'rejected'
                 message(context.channel, f'{rule.title} did not receive enough total votes ({rule.yays} - {rule.nays})')
+                rule.delete()
             elif rule.yays > rule.nays:
-                rule.status = 'passed'
-                message(context.channel, f'{rule.title} has passed ({rule.yays} - {rule.nays})!')
+                if rule.replaces:
+                    Rule.get(title=rule.replaces).delete()
+                    rule.title = rule.replaces
+                    rule.replaces = None
+                    rule.status = 'passed'
+                    message(context.channel, f'{rule.title} has been replaced ({rule.yays} - {rule.nays})!')
+                else:
+                    rule.status = 'passed'
+                    message(context.channel, f'{rule.title} has passed ({rule.yays} - {rule.nays})!')
             else:
-                rule.status = 'rejected'
                 message(context.channel, f'{rule.title} has been rejected ({rule.yays} - {rule.nays})!')
+                rule.delete()
 
 
 @initial_rule()
-def modify(context):
-    '''In progress: propose modification to the code of a rule'''
+def replace(context):
+    '''
+    Propose replacing a rule with a new rule, eg:
+    !replace test
+    \'''new version of test\'''
+    message(context.channel, 'hello')
+    '''
+    if context.command == 'replace':
+        lines = context.rest.splitlines()
+        if len(lines) < 2:
+            message(context.channel, 'Rules must have at least two lines')
+            return
+
+        replaces_title = context.rest.splitlines()[0].strip().lower()
+        title = f'replace {replaces_title}'
+        code = '\n'.join(context.rest.splitlines()[1:])
+
+        if not Rule.get(title=replaces_title):
+            message(context.channel, f'Couldn\'t find rule to replace: {replaces_title}')
+            return
+
+        if Rule.get(title=title):
+            message(context.channel, f'A vote to replace {replaces_title} is already in progress')
+            return
+
+        # Extract docstring from proposed rule
+        doc_func = 'def __func(context): ' + ''.join(f'\n    {line}' for line in code.split('\n'))
+        exec(doc_func)
+        doc = locals()['__func'].__doc__
+
+        rule = Rule(
+            proposed_by=context.db_user,
+            title=title,
+            code=code,
+            doc=doc,
+            replaces=replaces_title,
+            status='proposed'
+        )
+        message(context.channel, f'{rule.proposed_by.last_known_name} proposed to {rule.title}')

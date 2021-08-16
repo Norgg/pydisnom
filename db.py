@@ -26,6 +26,7 @@ class Rule(db.Entity):
     code = Required(str, autostrip=False)
     status = Required(str)
     doc = Optional(str, nullable=True)
+    replaces = Optional(str, nullable=True)
     proposed_by = Optional(User)
     proposed_at = Optional(datetime, default=datetime.now)
     passed_at = Optional(datetime)
@@ -40,19 +41,16 @@ class Rule(db.Entity):
         else:
             status_string = f'{self.status}'
 
-        yay_votes = Vote.select(rule=self, vote='yay').count()
-        nay_votes = Vote.select(rule=self, vote='nay').count()
-
-        vote_string = f'{yay_votes} yay - {nay_votes} nay'
+        vote_string = f'{self.yays} yay - {self.nays} nay'
         return f'**{self.title}** ({status_string}):\n{vote_string}\n{self.doc}```python\n{self.code}\n```'
 
     @property
     def yays(self):
-        return Vote.select(rule=self, vote='yay')
+        return Vote.select(rule=self, vote='yay').count()
 
     @property
     def nays(self):
-        return Vote.select(rule=self, vote='nay')
+        return Vote.select(rule=self, vote='nay').count()
 
 
 class Vote(db.Entity):

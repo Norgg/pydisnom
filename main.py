@@ -6,7 +6,7 @@ import discord
 import inspect
 from pony.orm import db_session
 from db import User, Rule, Vote
-from rules import initial_rules, async_exec, message
+from rules import initial_rules, message, run
 
 client = discord.Client()
 pdn_guild = None
@@ -77,8 +77,7 @@ async def _run_rules(msg=None):
         context.command = None
 
     print('running rules')
-    run_rules = Rule.get(title='run_rules')
-    await async_exec(run_rules.code, context)
+    await run(Rule.get(title='run_rules'), context)
 
 
 def save_initial_rules():
