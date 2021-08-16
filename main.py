@@ -6,7 +6,7 @@ import discord
 import inspect
 from pony.orm import db_session
 from db import User, Rule, Vote
-from rules import async_exec, run_rules, list_rules, show, propose, approve, reject, abstain, count
+from rules import initial_rules, async_exec, message
 
 client = discord.Client()
 pdn_guild = None
@@ -47,10 +47,10 @@ async def on_ready():
 
 
 @client.event
-async def on_message(message):
+async def on_message(msg):
     with db_session:
-        if message.content.startswith('!'):
-            await _run_rules(message)
+        if msg.content.startswith('!'):
+            await _run_rules(msg)
 
 
 async def rule_loop():
@@ -60,18 +60,18 @@ async def rule_loop():
             await asyncio.sleep(10)
 
 
-async def _run_rules(message=None):
+async def _run_rules(msg=None):
     # Set up context object for rules
     context = Box()
 
-    if message:
-        context.discord_user = message.author
-        context.db_user = User.get_or_create(str(message.author.id))
-        context.db_user.last_known_name = message.author.name
-        context.message = message
-        context.channel = message.channel
-        context.command = message.content.split(' ')[0][1:].lower()
-        context.rest = message.content[1+len(context.command):]
+    if msg:
+        context.discord_user = msg.author
+        context.db_user = User.get_or_create(str(msg.author.id))
+        context.db_user.last_known_name = msg.author.name
+        context.message = msg
+        context.channel = msg.channel
+        context.command = msg.content.split(' ')[0][1:].lower()
+        context.rest = msg.content[1+len(context.command):]
     else:
         context.channel = game_channel
         context.command = None
@@ -82,15 +82,20 @@ async def _run_rules(message=None):
 
 
 def save_initial_rules():
-    rules = [run_rules, list_rules, show, propose, approve, reject, abstain, count]
     with db_session:
-        for rule in rules:
-            if (Rule.get(title=rule.__name__)):
-                continue
+        for rule in initial_rules:
             code = inspect.getsource(rule)
-            code = '\n'.join(code.splitlines()[1:])
+            code = '\n'.join(code.splitlines()[2:])
             status = 'fixed' if rule.__name__ == 'run_rules' else 'initial'
-            Rule(title=rule.__name__, code=code, status=status)
+
+            existing_rule = Rule.get(title=rule.__name__)
+            if (existing_rule):
+                print(f'updating rule: {rule.__name__}')
+                existing_rule.code = code
+                existing_rule.doc = rule.__doc__
+            else:
+                print(f'adding initial rule: {rule.__name__}')
+                Rule(title=rule.__name__, code=code, status=status, doc=rule.__doc__)
 
 
 if __name__ == '__main__':
