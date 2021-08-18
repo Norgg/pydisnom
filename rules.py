@@ -16,8 +16,26 @@ command = None
 rest = None
 
 
-def save_initial_rules():
+def save_initial_rules(channel):
     with db_session:
+        if Rule.select().count() == 0:
+            print(f'No rules found, sending intro text to {channel}')
+            message(channel, '''
+**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++**
+**Welcome to pydisnom, setting up initial rules to start a new game!**
+As a first rule you could try out something like:
+```python
+!propose hello
+if command == 'hello':
+    message(channel, f'hiya {user.name}!')
+```
+You can then vote on it with `!yay hello` or `!nay hello`
+In 10 minutes it will either pass or fail and become a new game rule
+Game rules are run every 10 seconds and whenever someone types a command
+`!list` will list all current rules and `!show [title]` will give more details
+**+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++**
+''')
+
         for rule in initial_rules:
             code = inspect.getsource(rule)
             code = '\n'.join(code.splitlines()[2:])
@@ -74,7 +92,7 @@ async def run_rules():
 def list_rules():
     '''List all rules with `!list`'''
     if command in ['list', 'help']:
-        rules_string = '\n'.join([f'**{rule.title}**: {rule.doc}' for rule in Rule.select()])
+        rules_string = '\n'.join([f'**{rule.title}** (status: {rule.status}): {rule.doc}' for rule in Rule.select()])
         message(channel, f'The current rules are:\n{rules_string}')
 
 
@@ -90,7 +108,7 @@ def show():
 @initial_rule()
 def propose():
     '''
-        Propose a new rule, eg this will reply with 'hiya!' whenever someone says `!hello`:
+        Propose a new rule written in python, eg this will reply with 'hiya!' whenever someone says `!hello`:
         !propose hello
         if command == 'hello': message(channel, 'hiya!')
     '''

@@ -10,6 +10,7 @@ run_lock = asyncio.Lock()
 client = discord.Client()
 pdn_guild = None
 game_channel = None
+ready = False
 
 
 def main():
@@ -20,17 +21,17 @@ def main():
 -------
 """)
     token = open('token').read()
-    rules.save_initial_rules()
     client.run(token)
 
 
 @client.event
 async def on_ready():
     print('connected')
+    global pdn_guild, game_channel, ready
+
     # Find the pydisnom server
     for guild in client.guilds:
         if guild.name == 'pydisnom':
-            global pdn_guild
             pdn_guild = guild
             print(f'found server: {pdn_guild.name}')
             break
@@ -38,15 +39,18 @@ async def on_ready():
     # Find the game channel
     for channel in pdn_guild.channels:
         if channel.name == 'testing':
-            global game_channel
             game_channel = channel
             break
 
+    rules.save_initial_rules(game_channel)
     client.loop.create_task(rule_loop())
+    ready = True
 
 
 @client.event
 async def on_message(message):
+    if not ready:
+        return
     with db_session:
         if message.channel == game_channel and message.content.startswith('!'):
             print('running rules due to command')
