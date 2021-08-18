@@ -45,7 +45,11 @@ class Rule(db.Entity):
             status_string = f'{self.status}'
 
         vote_string = f'{self.yays} yay - {self.nays} nay'
-        return f'**{self.title}** ({status_string}):\n{vote_string}\n```python\n{self.code}\n```'
+        if self.deletes:
+            return f'**{self.title}**:\n{vote_string}'
+        else:
+            return f'**{self.title}** ({status_string}):\n{vote_string}\n```python\n{self.code}\n```'
+
 
     @property
     def yays(self):
