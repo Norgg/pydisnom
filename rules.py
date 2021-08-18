@@ -67,24 +67,25 @@ def message(to, message):
 
 
 async def run(rule):
-    # Make an async function with the code and exec it
-    exec_code = 'async def __ex(): ' + ''.join(f'\n    {line}' for line in rule.code.split('\n'))
-    exec(exec_code)
+    try:
+        # Make an async function with the code and exec it
+        exec_code = 'async def __ex(): ' + ''.join(f'\n    {line}' for line in rule.code.split('\n'))
+        exec(exec_code)
 
-    # Get `__ex` from local variables, call it and return the result
-    return await locals()['__ex']()
+        # Get `__ex` from local variables, call it and return the result
+        return await locals()['__ex']()
+    except Exception as e:
+        message(channel, f'Error running rule {rule.title}: {e}')
+        traceback.print_exc()
 
 
 async def run_rules():
     '''Runs all the rules'''
     for rule in Rule.select(lambda rule: rule.status in ['initial', 'passed']).order_by(Rule.id):
         with db_session:
-            try:
-                # print(f'running {rule.title}')
-                await run(rule)
-            except Exception as e:
-                message(channel, f'Error running rule {rule.title}: {e}')
-                traceback.print_exc()
+            # print(f'running {rule.title}')
+            await run(rule)
+
     for to, msg in messages:
         await to.send(msg)
     messages.clear()
@@ -163,7 +164,7 @@ def vote():
 
 
 @initial_rule()
-def count():
+async def count():
     '''Runs automatically to count votes after a while and pass or reject rules'''
     voting_duration = timedelta(minutes=1)
     min_votes = 1
@@ -176,6 +177,7 @@ def count():
                 rule.delete()
             elif rule.yays > rule.nays:
                 if rule.replaces:
+                    # For replacements delete the old rule and replace it with this one
                     Rule.get(title=rule.replaces).delete()
                     rule.title = rule.replaces
                     rule.replaces = None
@@ -183,13 +185,16 @@ def count():
                     rule.passed_at = datetime.now()
                     message(channel, f'{rule.title} has been replaced ({rule.yays} - {rule.nays})!')
                 elif rule.deletes:
+                    # For deletions delete the target and itslef
                     Rule.get(title=rule.deletes).delete()
                     rule.delete()
                     message(channel, f'{rule.deletes} has been deleted ({rule.yays} - {rule.nays})!')
                 else:
+                    # For new rules set it to passed and run it
                     rule.status = 'passed'
                     rule.passed_at = datetime.now()
                     message(channel, f'{rule.title} has passed ({rule.yays} - {rule.nays})!')
+                    await run(rule)
             else:
                 message(channel, f'{rule.title} has been rejected ({rule.yays} - {rule.nays})!')
                 rule.delete()
@@ -232,7 +237,7 @@ def replace():
         message(channel, f'{rule.proposed_by.name} proposed to {rule.title}')
 
 
-@initial_rule()
+# @initial_rule()
 def delete():
     '''Propose deletion of a rule: `!delete [title]`'''
     if command == 'delete':
