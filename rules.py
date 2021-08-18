@@ -1,7 +1,8 @@
+import inspect
 import traceback
 from datetime import datetime, timedelta
 
-from pony.orm import db_session
+from pony.orm import commit, db_session
 from db import Rule, User, Vote
 
 messages = []
@@ -13,6 +14,23 @@ user = None
 channel = None
 command = None
 rest = None
+
+
+def save_initial_rules():
+    with db_session:
+        for rule in initial_rules:
+            code = inspect.getsource(rule)
+            code = '\n'.join(code.splitlines()[2:])
+            status = 'fixed' if rule.__name__ == 'run_rules' else 'initial'
+
+            existing_rule = Rule.get(title=rule.__name__)
+            if (existing_rule):
+                print(f'updating rule: {rule.__name__}')
+                existing_rule.code = code
+                existing_rule.doc = rule.__doc__
+            else:
+                print(f'adding initial rule: {rule.__name__}')
+                Rule(title=rule.__name__, code=code, status=status, doc=rule.__doc__)
 
 
 def initial_rule(title=None):
@@ -38,9 +56,8 @@ async def run(rule):
     return await locals()['__ex']()
 
 
-@initial_rule()
 async def run_rules():
-    '''Runs all the other rules'''
+    '''Runs all the rules'''
     for rule in Rule.select(lambda rule: rule.status in ['initial', 'passed']).order_by(Rule.id):
         with db_session:
             try:
@@ -55,15 +72,15 @@ async def run_rules():
 
 @initial_rule('list')
 def list_rules():
-    '''List all rules'''
+    '''List all rules with `!list`'''
     if command in ['list', 'help']:
-        rules_string = '\n'.join([f'**{rule.title}** ({rule.status}) - {rule.doc}' for rule in Rule.select()])
+        rules_string = '\n'.join([f'**{rule.title}**: {rule.doc}' for rule in Rule.select()])
         message(channel, f'The current rules are:\n{rules_string}')
 
 
 @initial_rule()
 def show():
-    '''Display details and code of a rule with !show [title]'''
+    '''Display details and code of a rule with `!show [title]`'''
     if command == 'show':
         rule = Rule.get(title=rest.strip().lower())
         if rule:
@@ -73,9 +90,9 @@ def show():
 @initial_rule()
 def propose():
     '''
-    Propose a new rule with the title on the first line and code on subsequent lines, eg:
-    !propose test rule
-    if command == 'test': message(channel, 'test')
+        Propose a new rule, eg this will reply with 'hiya!' whenever someone says `!hello`:
+        !propose hello
+        if command == 'hello': message(channel, 'hiya!')
     '''
     if command == 'propose':
         lines = rest.splitlines()
@@ -107,8 +124,8 @@ def propose():
 
 @initial_rule()
 def vote():
-    '''Use !yay [title], !nay [title] or !abstain [title] to vote on a rule'''
-    if command in ['yay', 'nay', 'abstain']:
+    '''Use `!yay [title]`, `!nay [title]` to vote on a rule'''
+    if command in ['yay', 'nay']:
         title = rest.strip().lower()
         rule = Rule.get(title=title)
         if rule:
@@ -127,7 +144,7 @@ def vote():
 
 @initial_rule()
 def count():
-    '''Tally up votes after a while and pass or reject rules if they have more than a minimum number of votes'''
+    '''Runs automatically to count votes after a while and pass or reject rules'''
     voting_duration = timedelta(minutes=1)
     min_votes = 1
     for rule in Rule.select(status='proposed'):
@@ -159,12 +176,7 @@ def count():
 
 @initial_rule()
 def replace():
-    '''
-    Propose replacing a rule with a new rule, eg:
-    !replace test
-    \'''new version of test\'''
-    if command == 'test': message(channel, 'hello!')
-    '''
+    '''Propose replacing a rule with a new rule with `!replace` in the same way as `!propose`'''
     if command == 'replace':
         lines = rest.splitlines()
         if len(lines) < 2:
@@ -201,7 +213,7 @@ def replace():
 
 @initial_rule()
 def delete():
-    '''Propose deletion of a rule: !delete [title]'''
+    '''Propose deletion of a rule: `!delete [title]`'''
     if command == 'delete':
         deletes_title = rest.splitlines()[0].strip().lower()
         title = f'delete {deletes_title}'
@@ -227,3 +239,15 @@ def delete():
             status='proposed'
         )
         message(channel, f'{rule.proposed_by.name} proposed to {rule.title}')
+
+
+# @initial_rule()
+def victory():
+    '''If a player has won then reset the game'''
+    for user in User.select():
+        if user.data.get('won'):
+            message(channel, f'Congrats to {user.name} for winning the game!')
+            message(channel, 'Resetting rules...')
+            Rule.select().delete()  # Delete all the rules
+            commit()
+            save_initial_rules()

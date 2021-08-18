@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 
 import asyncio
-from box import Box
 import discord
-import inspect
 from pony.orm import db_session
 from db import User, Rule
 import rules
 
+run_lock = asyncio.Lock()
 client = discord.Client()
 pdn_guild = None
 game_channel = None
@@ -21,7 +20,7 @@ def main():
 -------
 """)
     token = open('token').read()
-    save_initial_rules()
+    rules.save_initial_rules()
     client.run(token)
 
 
@@ -76,24 +75,8 @@ async def _run_rules(message=None):
         rules.command = None
         rules.rest = None
 
-    await rules.run(Rule.get(title='run_rules'))
-
-
-def save_initial_rules():
-    with db_session:
-        for rule in rules.initial_rules:
-            code = inspect.getsource(rule)
-            code = '\n'.join(code.splitlines()[2:])
-            status = 'fixed' if rule.__name__ == 'run_rules' else 'initial'
-
-            existing_rule = Rule.get(title=rule.__name__)
-            if (existing_rule):
-                print(f'updating rule: {rule.__name__}')
-                existing_rule.code = code
-                existing_rule.doc = rule.__doc__
-            else:
-                print(f'adding initial rule: {rule.__name__}')
-                Rule(title=rule.__name__, code=code, status=status, doc=rule.__doc__)
+    async with run_lock:
+        await rules.run_rules()
 
 
 if __name__ == '__main__':
