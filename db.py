@@ -63,5 +63,16 @@ class Vote(db.Entity):
     at = Optional(datetime, default=datetime.now)
 
 
+class Store(db.Entity):
+    data = Required(Json, default=dict)
+
+    @classmethod
+    def instance(cls):
+        store = cls.get()
+        if not store:
+            store = Store()
+        return store
+
+
 # sql_debug(True)
 db.generate_mapping(create_tables=True)

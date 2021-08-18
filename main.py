@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 import asyncio
+from box import Box
 import discord
 from pony.orm import db_session
-from db import User, Rule
+from db import User, Rule, Store
 import rules
 
 run_lock = asyncio.Lock()
@@ -67,6 +68,7 @@ async def rule_loop():
 
 async def _run_rules(message=None):
     # Set up context object for rules
+    rules.data = Store.instance().data
     if message:
         rules.user = User.get_or_create(str(message.author.id))
         rules.user.name = message.author.name

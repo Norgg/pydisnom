@@ -14,6 +14,7 @@ user = None
 channel = None
 command = None
 rest = None
+data = None
 
 
 def save_initial_rules(channel):
@@ -39,7 +40,7 @@ Game rules are run every 10 seconds and whenever someone types a command
         for rule in initial_rules:
             code = inspect.getsource(rule)
             code = '\n'.join(code.splitlines()[2:])
-            status = 'fixed' if rule.__name__ == 'run_rules' else 'initial'
+            status = 'initial'
 
             existing_rule = Rule.get(title=rule.__name__)
             if (existing_rule):
@@ -79,6 +80,7 @@ async def run_rules():
     for rule in Rule.select(lambda rule: rule.status in ['initial', 'passed']).order_by(Rule.id):
         with db_session:
             try:
+                # print(f'running {rule.title}')
                 await run(rule)
             except Exception as e:
                 message(channel, f'Error running rule {rule.title}: {e}')
@@ -186,6 +188,7 @@ def count():
                     message(channel, f'{rule.deletes} has been deleted ({rule.yays} - {rule.nays})!')
                 else:
                     rule.status = 'passed'
+                    rule.passed_at = datetime.now()
                     message(channel, f'{rule.title} has passed ({rule.yays} - {rule.nays})!')
             else:
                 message(channel, f'{rule.title} has been rejected ({rule.yays} - {rule.nays})!')
