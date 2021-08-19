@@ -112,35 +112,65 @@ def show():
 def propose():
     '''
         Propose a new rule written in python, eg this will reply with 'hiya!' whenever someone says `!hello`:
+        ```
         !propose hello
         if command == 'hello': message(channel, 'hiya!')
+        ```
+        Can also be used to replace an existing rule, deleting it if no code is given
     '''
     if command == 'propose':
         lines = rest.splitlines()
-        if len(lines) < 2:
-            message(channel, 'Rules must have at least two lines')
-            return
 
         title = rest.splitlines()[0].strip().lower()
-        code = '\n'.join(rest.splitlines()[1:])
+        replaces_title = None
+        deletes = None
 
-        if Rule.get(title=title):
-            message(channel, f'A rule already exists called "{title}"')
-            return
+        if len(lines) == 1:
+            if Rule.get(title=title):
+                # There's no code and this is an existing rule so propose deletion
+                deletes = title
+                title = f'delete {deletes}'
+                code = ''
+                doc = f'Deletes rule {title}'
+                if Rule.get(title=title):
+                    message(channel, f'A vote to "{title}" is already in progress')
+                    return
+                else:
+                    message(channel, f'Proposing deletion of {title}')
 
-        # Extract docstring from proposed rule
-        doc_func = 'def __func(): ' + ''.join(f'\n    {line}' for line in code.split('\n'))
-        exec(doc_func)
-        doc = locals()['__func'].__doc__
+            else:
+                message(channel, 'Please provide code for this new rule')
+                return
+        else:
+            code = '\n'.join(rest.splitlines()[1:])
+
+            # Extract docstring from proposed rule
+            doc_func = 'def __func(): ' + ''.join(f'\n    {line}' for line in code.split('\n'))
+            exec(doc_func)
+            doc = locals()['__func'].__doc__
+
+            # Check if this replaces an existing rule
+            if Rule.get(title=title):
+                message(channel, f'A rule already exists called "{title}" so this will replace it')
+                replaces_title = title
+                title = f'replace {replaces_title}'
+                
+                # If a rule with this title already exists, give it a number (should only apply to deletions/replacements)
+                i = 1
+                while Rule.get(title=title):
+                    i += 1
+                    title = f'replace {replaces_title} {i}'
 
         rule = Rule(
             proposed_by=user,
             title=title,
+            replaces_title=replaces_title,
+            deletes=deletes,
             code=code,
             doc=doc,
             status='proposed'
         )
-        message(channel, f'{rule.proposed_by.name} proposed rule {rule.title}')
+        message(channel, f'{rule.proposed_by.name} proposed "{rule.title}"')
 
 
 @initial_rule()
@@ -198,73 +228,6 @@ async def count():
             else:
                 message(channel, f'{rule.title} has been rejected ({rule.yays} - {rule.nays})!')
                 rule.delete()
-
-
-@initial_rule()
-def replace():
-    '''Propose replacing a rule with a new rule with `!replace` in the same way as `!propose`'''
-    if command == 'replace':
-        lines = rest.splitlines()
-        if len(lines) < 2:
-            message(channel, 'Rules must have at least two lines')
-            return
-
-        replaces_title = rest.splitlines()[0].strip().lower()
-        title = f'replace {replaces_title}'
-        code = '\n'.join(rest.splitlines()[1:])
-
-        if not Rule.get(title=replaces_title):
-            message(channel, f'Couldn\'t find rule to replace: {replaces_title}')
-            return
-
-        if Rule.get(title=title):
-            message(channel, f'A vote to replace {replaces_title} is already in progress')
-            return
-
-        # Extract docstring from proposed rule
-        doc_func = 'def __func(): ' + ''.join(f'\n    {line}' for line in code.split('\n'))
-        exec(doc_func)
-        doc = locals()['__func'].__doc__
-
-        rule = Rule(
-            proposed_by=user,
-            title=title,
-            code=code,
-            doc=doc,
-            replaces=replaces_title,
-            status='proposed'
-        )
-        message(channel, f'{rule.proposed_by.name} proposed to {rule.title}')
-
-
-# @initial_rule()
-def delete():
-    '''Propose deletion of a rule: `!delete [title]`'''
-    if command == 'delete':
-        deletes_title = rest.splitlines()[0].strip().lower()
-        title = f'delete {deletes_title}'
-
-        if not (deletes_title):
-            message(channel, 'Delete which rule?')
-            return
-
-        if not Rule.get(title=deletes_title):
-            message(channel, f'Couldn\'t find rule to delete: {deletes_title}')
-            return
-
-        if Rule.get(title=title):
-            message(channel, f'A vote to delete {deletes_title} is already in progress')
-            return
-
-        rule = Rule(
-            proposed_by=user,
-            title=title,
-            code='',
-            doc=f'Delete {deletes_title}',
-            deletes=deletes_title,
-            status='proposed'
-        )
-        message(channel, f'{rule.proposed_by.name} proposed to {rule.title}')
 
 
 # @initial_rule()
