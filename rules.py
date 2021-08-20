@@ -136,7 +136,7 @@ def propose():
                     message(channel, f'A vote to "{title}" is already in progress')
                     return
                 else:
-                    message(channel, f'Proposing deletion of {title}')
+                    message(channel, f'Proposing deletion of {deletes}')
 
             else:
                 message(channel, 'Please provide code for this new rule')
@@ -164,7 +164,7 @@ def propose():
         rule = Rule(
             proposed_by=user,
             title=title,
-            replaces_title=replaces_title,
+            replaces=replaces_title,
             deletes=deletes,
             code=code,
             doc=doc,
