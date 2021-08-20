@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from pony.orm import commit, db_session
 from db import Rule, User, Vote
+from discord.errors import HTTPException
 
 messages = []
 initial_rules = []
@@ -87,7 +88,11 @@ async def run_rules():
             await run(rule)
 
     for to, msg in messages:
-        await to.send(msg)
+        try:
+            await to.send(msg[:1999])
+        except HTTPException as e:
+            print(f'Exception while trying to send message {e}')
+            traceback.print_exc()
     messages.clear()
 
 
@@ -110,66 +115,51 @@ def show():
 
 @initial_rule()
 def propose():
-    '''
-        Propose a new rule written in python, eg this will reply with 'hiya!' whenever someone says `!hello`:
-        ```
-        !propose hello
-        if command == 'hello': message(channel, 'hiya!')
-        ```
-        Can also be used to replace an existing rule, deleting it if no code is given
-    '''
+    '''Propose a new rule written in python, eg this will reply with 'hiya!' whenever someone says `!hello`:
+> !propose hello
+> if command == 'hello': message(channel, 'hiya!')
+Can also be used to replace an existing rule or delete it if no code is given'''
     if command == 'propose':
         lines = rest.splitlines()
-
-        title = rest.splitlines()[0].strip().lower()
-        replaces_title = None
+        title = lines[0].strip().lower()
+        replaces = None
         deletes = None
+        old = Rule.get(title=title)
 
         if len(lines) == 1:
-            if Rule.get(title=title):
-                # There's no code and this is an existing rule so propose deletion
+            if old:
+                # There's no code so propose deletion
                 deletes = title
                 title = f'delete {deletes}'
                 code = ''
                 doc = f'Deletes rule {title}'
-                if Rule.get(title=title):
+                if old:
                     message(channel, f'A vote to "{title}" is already in progress')
                     return
-                else:
-                    message(channel, f'Proposing deletion of {deletes}')
-
             else:
                 message(channel, 'Please provide code for this new rule')
                 return
         else:
-            code = '\n'.join(rest.splitlines()[1:])
+            code = '\n'.join(lines[1:])
 
-            # Extract docstring from proposed rule
+            # Extract docstring
             doc_func = 'def __func(): ' + ''.join(f'\n    {line}' for line in code.split('\n'))
             exec(doc_func)
             doc = locals()['__func'].__doc__
 
-            # Check if this replaces an existing rule
-            if Rule.get(title=title):
+            if old:
                 message(channel, f'A rule already exists called "{title}" so this will replace it')
-                replaces_title = title
-                title = f'replace {replaces_title}'
-                
-                # If a rule with this title already exists, give it a number (should only apply to deletions/replacements)
-                i = 1
-                while Rule.get(title=title):
-                    i += 1
-                    title = f'replace {replaces_title} {i}'
+                replaces = title
+                title = f'replace {replaces}'
 
-        rule = Rule(
-            proposed_by=user,
-            title=title,
-            replaces=replaces_title,
-            deletes=deletes,
-            code=code,
-            doc=doc,
-            status='proposed'
-        )
+                # Add a number so it's unique
+                i = 1
+                while old:
+                    i += 1
+                    title = f'replace {replaces} {i}'
+
+        rule = Rule(proposed_by=user, title=title, replaces=replaces, deletes=deletes,
+                    code=code, doc=doc, status='proposed')
         message(channel, f'{rule.proposed_by.name} proposed "{rule.title}"')
 
 
